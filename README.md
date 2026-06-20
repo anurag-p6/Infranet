@@ -172,6 +172,61 @@ User                         Monad testnet              Runner
 
 ---
 
+## Agent staking (MON bond at listing)
+
+Providers lock a refundable **native MON bond** when they list an agent. The
+bond is held by the `AgentStaking` contract, shown on the marketplace as a
+"Bonded" badge, refundable on delist, and slashable by the platform owner.
+
+### 1. Deploy the staking contract (once)
+
+```bash
+cd contracts
+forge script script/DeployStaking.s.sol \
+  --rpc-url https://testnet-rpc.monad.xyz \
+  --private-key $DEPLOYER_PRIVATE_KEY \
+  --broadcast
+```
+
+Set the deployed address in both environments:
+
+```bash
+# root .env (provider)
+set AGENT_STAKING_CONTRACT=0xYourStakingContract
+# frontend/.env.local (marketplace)
+set NEXT_PUBLIC_AGENT_STAKING_CONTRACT=0xYourStakingContract
+```
+
+### 2. Provider — stake while serving
+
+```bash
+set AGENT_OWNER_PRIVATE_KEY=0xYourProviderKey
+set AGENT_STAKING_CONTRACT=0xYourStakingContract
+infernet serve --backend ollama --name echo-agent --stake 0.01 --publish \
+  --manifest manifests/echo-agent.json
+```
+
+The runner locks the bond on-chain before publishing and writes
+`stake_amount`, `stake_tx`, and `staker` into the manifest. If the agent is
+already bonded, it reuses the existing stake.
+
+From Python:
+
+```python
+from infernet import stake_agent, get_stake, withdraw_stake
+
+stake_agent("echo-agent", "0.01")     # lock bond
+get_stake("echo-agent")               # read bond from chain
+withdraw_stake("echo-agent")          # refund on delist
+```
+
+### 3. Marketplace verification
+
+The frontend reads `stakeOf(agentId)` on-chain for every listing and shows the
+bonded MON amount + staker. No bond → "Unbonded" badge.
+
+---
+
 ## ERC-8004 agent verification (Monad)
 
 InferNet integrates with the [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) Identity Registry on Monad testnet. Providers mint an on-chain agent NFT; users verify the manifest matches chain state before calling the agent.
