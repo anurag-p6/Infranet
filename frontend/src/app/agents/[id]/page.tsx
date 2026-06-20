@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { VerificationBadge } from "@/components/VerificationBadge";
 import { EndpointStatus } from "@/components/EndpointStatus";
 import { AgentStatusBadge } from "@/components/AgentStatusBadge";
+import { StakeBadge } from "@/components/StakeBadge";
 import { InferencePanel } from "@/components/InferencePanel";
 import { CopyAgentSnippet } from "@/components/CopyAgentSnippet";
 import { getAgentById } from "@/lib/agents";
@@ -41,12 +42,15 @@ export default async function AgentDetailPage({
 
           <p className="text-foreground/80">{agent.description}</p>
 
-          <VerificationBadge
-            registered={agent.isRegistered}
-            verified={agent.onChainVerified}
-            agentId={agent.erc8004AgentId}
-          />
-          <AgentStatusBadge status={agent.status} />
+          <div className="flex flex-wrap gap-2">
+            <VerificationBadge
+              registered={agent.isRegistered}
+              verified={agent.onChainVerified}
+              agentId={agent.erc8004AgentId}
+            />
+            <StakeBadge staked={agent.staked} amount={agent.stakeOnChain} />
+            <AgentStatusBadge status={agent.status} />
+          </div>
 
           <div className="rounded-xl bg-surface-muted p-4 text-sm">
             <p className="font-semibold">Manifest fields</p>
@@ -54,6 +58,31 @@ export default async function AgentDetailPage({
               <div className="flex flex-wrap gap-2">
                 <dt className="text-foreground/45">price</dt>
                 <dd>{agent.isPaid ? `${agent.pricePerCall} INFR` : "Free"}</dd>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <dt className="text-foreground/45">stake</dt>
+                <dd>
+                  {agent.staked ? (
+                    <>
+                      {agent.stakeOnChain} MON bonded
+                      {agent.stakerOnChain && (
+                        <>
+                          {" "}
+                          <a
+                            href={addressUrl(agent.stakerOnChain)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-violet-primary hover:underline"
+                          >
+                            (staker)
+                          </a>
+                        </>
+                      )}
+                    </>
+                  ) : (
+                    "No bond"
+                  )}
+                </dd>
               </div>
               {agent.wallet && (
                 <div className="flex flex-wrap gap-2">
@@ -95,6 +124,7 @@ export default async function AgentDetailPage({
             agentId={agent.id}
             isPaid={agent.isPaid}
             pricePerCall={agent.pricePerCall}
+            isVerified={agent.onChainVerified}
           />
         </div>
 

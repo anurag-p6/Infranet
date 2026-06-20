@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { InferencePanel } from "@/components/InferencePanel";
+import { CopyAgentSnippet } from "@/components/CopyAgentSnippet";
 import { getAgentById } from "@/lib/agents";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,14 @@ export default async function AgentRunPage({
         >
           ← Back to {agent.name}
         </Link>
+        <div className="mt-6">
+          <CopyAgentSnippet
+            agentId={agent.id}
+            isPaid={agent.isPaid}
+            pricePerCall={agent.pricePerCall}
+            isVerified={agent.onChainVerified}
+          />
+        </div>
         <div className="mt-6">
           <InferencePanel agent={agent} />
         </div>

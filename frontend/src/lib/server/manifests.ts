@@ -1,1 +1,1 @@
-export { loadManifests, manifestsDir } from "@/lib/server/registry";
+export { loadManifests } from "@/lib/server/registry";

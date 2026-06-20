@@ -15,6 +15,9 @@ export type InferManifest = {
   erc8004_agent_id: string;
   erc8004_registry: string;
   erc8004_tx: string;
+  stake_amount: string;
+  stake_tx: string;
+  staker: string;
 };
 
 export function manifestToAgent(m: InferManifest) {
@@ -35,6 +38,9 @@ export function manifestToAgent(m: InferManifest) {
     erc8004AgentId: m.erc8004_agent_id,
     erc8004Registry: m.erc8004_registry,
     erc8004Tx: m.erc8004_tx,
+    stakeAmount: m.stake_amount || "0",
+    stakeTx: m.stake_tx || "",
+    staker: (m.staker || "") as string,
     hasEndpoint: Boolean(m.multiaddr || m.endpoint),
     isPaid: Number(m.price_per_call) > 0 && Boolean(m.wallet),
     isRegistered: Boolean(m.erc8004_agent_id),

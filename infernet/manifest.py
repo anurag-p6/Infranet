@@ -21,6 +21,14 @@ class Manifest(BaseModel):
     protocol: str = "/infernet/agent/1.0.0"
     backend: str = "custom"
     tools: list[str] = Field(default_factory=list)
+    description: str = ""
+    image: str = ""
+    erc8004_agent_id: str = ""
+    erc8004_registry: str = ""
+    erc8004_tx: str = ""
+    stake_amount: str = ""
+    stake_tx: str = ""
+    staker: str = ""
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.model_dump(), indent=indent)

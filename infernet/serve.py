@@ -55,6 +55,7 @@ class ServedAgent:
     agent_type: str = "general"
     port: int = 0
     manifest_path: str | None = None
+    stake_amount: str = ""
 
     def serve(self) -> None:
         async def _main() -> None:
@@ -68,6 +69,9 @@ class ServedAgent:
                 wallet=self.wallet,
                 agent_type=self.agent_type,
                 manifest_path=self.manifest_path,
+                register_erc8004=os.environ.get("REGISTER_ERC8004", "").lower()
+                in {"1", "true", "yes"},
+                stake_amount=self.stake_amount or os.environ.get("AGENT_STAKE", ""),
             )
 
         trio.run(_main)
@@ -85,6 +89,7 @@ def serve_agent(
     agent_type: str = "general",
     port: int = 0,
     manifest_path: str | None = None,
+    stake_amount: str = "",
 ) -> Callable[[Callable[[str, int], str]], ServedAgent]:
     """Decorator to expose a Python function as a shared libp2p agent."""
 
@@ -102,6 +107,7 @@ def serve_agent(
             agent_type=agent_type,
             port=port,
             manifest_path=manifest_path,
+            stake_amount=stake_amount or os.environ.get("AGENT_STAKE", ""),
         )
 
     return decorator

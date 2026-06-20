@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,11 +10,13 @@ from libp2p import new_host
 from libp2p.crypto.secp256k1 import create_new_key_pair
 from libp2p.peer.peerinfo import info_from_p2p_addr
 
-from infernet.exceptions import PaymentError, PaymentRequiredError
+from infernet.exceptions import AgentVerificationError, PaymentError, PaymentRequiredError
 from infernet.manifest import Manifest
 from infernet.payment import payment_required, send_infr_payment
+from infernet.erc8004 import registration_required, verify_agent_registration
 from infernet.p2p import MANIFEST_PROTOCOL, send_request
 from infernet.protocol import PROTOCOL_ID
+from infernet.registry import resolve_manifest
 
 
 @dataclass
@@ -34,6 +37,8 @@ class Client:
         multiaddr: str | None = None,
         manifest: Manifest | None = None,
         payment_tx: str = "",
+        private_key: str = "",
+        verify_erc8004: bool = True,
     ) -> None:
         if manifest is None and multiaddr is None:
             raise ValueError("Provide multiaddr or manifest")
@@ -41,21 +46,82 @@ class Client:
         self.manifest = manifest
         self.multiaddr = multiaddr or (manifest.multiaddr if manifest else "")
         self.payment_tx = payment_tx
+        # Consumer's private key used to sign the INFR payment transaction.
+        # Falls back to PAYER_PRIVATE_KEY env var when left empty.
+        self.private_key = private_key
+        self.verify_erc8004 = verify_erc8004
 
         if not self.multiaddr:
             raise ValueError("No peer multiaddr available")
 
     @classmethod
-    def from_multiaddr(cls, multiaddr_str: str, payment_tx: str = "") -> Client:
-        return cls(multiaddr=multiaddr_str, payment_tx=payment_tx)
+    def from_multiaddr(
+        cls,
+        multiaddr_str: str,
+        payment_tx: str = "",
+        *,
+        private_key: str = "",
+        verify_erc8004: bool = True,
+    ) -> Client:
+        return cls(
+            multiaddr=multiaddr_str,
+            payment_tx=payment_tx,
+            private_key=private_key,
+            verify_erc8004=verify_erc8004,
+        )
 
     @classmethod
-    def from_manifest(cls, source: str, payment_tx: str = "") -> Client:
+    def from_manifest(
+        cls,
+        source: str,
+        payment_tx: str = "",
+        *,
+        private_key: str = "",
+        verify_erc8004: bool = True,
+    ) -> Client:
         manifest = Manifest.from_source(source)
         multiaddr_str = manifest.multiaddr or manifest.endpoint
         if not multiaddr_str:
             raise ValueError("Manifest is missing multiaddr/endpoint")
-        return cls(manifest=manifest, multiaddr=multiaddr_str, payment_tx=payment_tx)
+        return cls(
+            manifest=manifest,
+            multiaddr=multiaddr_str,
+            payment_tx=payment_tx,
+            private_key=private_key,
+            verify_erc8004=verify_erc8004,
+        )
+
+    @classmethod
+    def from_agent(
+        cls,
+        agent_id: str,
+        payment_tx: str = "",
+        *,
+        platform_url: str | None = None,
+        private_key: str = "",
+        verify_erc8004: bool = True,
+    ) -> Client:
+        """Connect using only the agent id copied from the InferNet platform.
+
+        The manifest (live endpoint, price, wallet) is resolved from the
+        platform automatically. Set ``INFERNET_PLATFORM_URL`` or pass
+        ``platform_url`` to point at a specific platform. Pass ``private_key``
+        (or set ``PAYER_PRIVATE_KEY``) to auto-pay the listed INFR price.
+        """
+        manifest = resolve_manifest(agent_id, platform_url=platform_url)
+        multiaddr_str = manifest.multiaddr or manifest.endpoint
+        if not multiaddr_str:
+            raise ValueError(
+                f"Agent '{agent_id}' is listed but has no live endpoint yet. "
+                "Ask the provider to run `infernet serve --publish`."
+            )
+        return cls(
+            manifest=manifest,
+            multiaddr=multiaddr_str,
+            payment_tx=payment_tx,
+            private_key=private_key,
+            verify_erc8004=verify_erc8004,
+        )
 
     async def _ensure_manifest(self, host: Any, peer_id: Any) -> Manifest:
         if self.manifest is not None:
@@ -84,15 +150,17 @@ class Client:
         if not auto_pay:
             raise PaymentRequiredError(
                 f"Agent requires {manifest.price_per_call} INFR to {manifest.wallet}. "
-                "Pass payment_tx or enable auto_pay with PAYER_PRIVATE_KEY set."
+                "Pass payment_tx or enable auto_pay with a private key set."
             )
 
-        return await trio.to_thread.run_sync(
+        pay = functools.partial(
             send_infr_payment,
             to_wallet=manifest.wallet,
             amount=manifest.price_per_call,
             token_contract=manifest.price_token,
+            private_key=self.private_key or None,
         )
+        return await trio.to_thread.run_sync(pay)
 
     async def infer_async(
         self,
@@ -109,6 +177,8 @@ class Client:
         async with host.run(listen_addrs=[]):
             await host.connect(info)
             manifest = await self._ensure_manifest(host, info.peer_id)
+            if self.verify_erc8004 and registration_required(manifest):
+                await trio.to_thread.run_sync(verify_agent_registration, manifest)
             tx = await self._resolve_payment_tx(
                 manifest,
                 payment_tx,

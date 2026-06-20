@@ -1,6 +1,6 @@
 import { loadManifests } from "@/lib/server/manifests";
 import { loadRegistry, resolveAgentStatus } from "@/lib/server/registry";
-import { verifyErc8004Agent } from "@/lib/server/chain";
+import { getAgentStake, verifyErc8004Agent } from "@/lib/server/chain";
 import { manifestToAgent, type ManifestAgent } from "@/lib/manifests";
 
 export type ListedAgent = ManifestAgent & {
@@ -10,6 +10,9 @@ export type ListedAgent = ManifestAgent & {
   lastHeartbeat: string | null;
   status: "online" | "offline" | "unknown";
   peerId: string;
+  staked: boolean;
+  stakeOnChain: string;
+  stakerOnChain: string;
 };
 
 export type AgentFilters = {
@@ -28,9 +31,12 @@ export async function getLiveAgents(filters: AgentFilters = {}): Promise<ListedA
     manifests.map(async (manifest) => {
       const agent = manifestToAgent(manifest);
       const entry = registry.agents[manifest.agent_id];
-      const onChainVerified = agent.erc8004AgentId
-        ? await verifyErc8004Agent(agent.erc8004AgentId)
-        : false;
+      const [onChainVerified, stake] = await Promise.all([
+        agent.erc8004AgentId
+          ? verifyErc8004Agent(agent.erc8004AgentId)
+          : Promise.resolve(false),
+        getAgentStake(manifest.agent_id),
+      ]);
 
       return {
         ...agent,
@@ -40,6 +46,9 @@ export async function getLiveAgents(filters: AgentFilters = {}): Promise<ListedA
         lastHeartbeat: entry?.last_heartbeat ?? null,
         peerId: entry?.peer_id ?? "",
         status: resolveAgentStatus(entry),
+        staked: stake.staked,
+        stakeOnChain: stake.staked ? stake.amount : agent.stakeAmount,
+        stakerOnChain: stake.staker || agent.staker,
       };
     }),
   );

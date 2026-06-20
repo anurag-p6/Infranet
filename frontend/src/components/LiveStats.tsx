@@ -56,7 +56,7 @@ export function LiveStats() {
       <StatCard
         label="Listed manifests"
         value={agentCount !== null ? String(agentCount) : "…"}
-        hint="From manifests/ directory"
+        hint="From Neon Postgres"
       />
       <StatCard
         label="ERC-8004 agents"

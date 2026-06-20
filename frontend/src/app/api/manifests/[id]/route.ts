@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadManifests } from "@/lib/server/registry";
+import { getManifestById } from "@/lib/server/db";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -9,8 +9,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const manifests = await loadManifests();
-  const manifest = manifests.find((m) => m.agent_id === id);
+  const manifest = await getManifestById(id);
 
   if (!manifest) {
     return NextResponse.json(
@@ -21,3 +20,4 @@ export async function GET(
 
   return NextResponse.json(manifest);
 }
+

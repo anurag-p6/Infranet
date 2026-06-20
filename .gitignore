@@ -1,0 +1,19 @@
+# Contracts
+contracts/cache/
+contracts/out/
+contracts/lib/
+contracts/broadcast/
+
+# Secrets
+.env
+.env.local
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+dist/
+*.egg-info/
+
+# Manifests generated at runtime (optional — keep examples)
+# manifests/*.json

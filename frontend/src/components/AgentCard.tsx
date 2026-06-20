@@ -2,6 +2,7 @@ import type { ListedAgent } from "@/lib/agents";
 import { VerificationBadge } from "@/components/VerificationBadge";
 import { EndpointStatus } from "@/components/EndpointStatus";
 import { AgentStatusBadge } from "@/components/AgentStatusBadge";
+import { StakeBadge } from "@/components/StakeBadge";
 import { HoverButton } from "@/components/HoverButton";
 
 export function AgentCard({ agent }: { agent: ListedAgent }) {
@@ -25,6 +26,7 @@ export function AgentCard({ agent }: { agent: ListedAgent }) {
           verified={agent.onChainVerified}
           agentId={agent.erc8004AgentId}
         />
+        <StakeBadge staked={agent.staked} amount={agent.stakeOnChain} />
         <EndpointStatus hasEndpoint={agent.hasEndpoint} />
       </div>
 

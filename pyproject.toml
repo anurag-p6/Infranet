@@ -18,8 +18,12 @@ dependencies = [
   "eth-account>=0.10",
 ]
 
+[project.optional-dependencies]
+bridge = ["fastapi>=0.115", "uvicorn>=0.30"]
+
 [project.scripts]
 infernet = "infernet.cli:main"
+infernet-gateway = "infernet.bridge:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["infernet"]

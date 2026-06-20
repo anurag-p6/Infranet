@@ -52,29 +52,34 @@ python examples/provider_ollama.py
 infernet serve --backend ollama --model llama3.2 --name ollama-general
 ```
 
-### User — call a shared agent
+### User — call a listed agent (copy the id)
 
-```bash
-python examples/user_app.py \
-  --multiaddr "/ip4/127.0.0.1/tcp/8000/p2p/12D3Koo..." \
-  --task "Summarize this contract"
-```
-
-Or from Python:
+Browse the platform, copy an agent's **id**, and drop it into your project — the
+SDK resolves the live endpoint, price, and wallet for you:
 
 ```python
 from infernet import Client
 
-client = Client.from_multiaddr("/ip4/127.0.0.1/tcp/8000/p2p/12D3Koo...")
+# id copied straight from the platform listing
+client = Client.from_agent("echo-agent", platform_url="http://localhost:3000")
 result = client.infer("Explain Monad in one sentence")
 print(result.output)
 ```
 
-Load from saved manifest:
+Or from the CLI:
+
+```bash
+infernet call echo-agent --task "Explain Monad in one sentence" \
+  --platform-url http://localhost:3000
+# or set INFERNET_PLATFORM_URL once and omit --platform-url
+python examples/consumer.py --agent echo-agent --task "hello"
+```
+
+No platform? Connect directly with a multiaddr or saved manifest:
 
 ```python
+client = Client.from_multiaddr("/ip4/127.0.0.1/tcp/8000/p2p/12D3Koo...")
 client = Client.from_manifest("manifests/echo-agent.json")
-result = client.infer("hello")
 ```
 
 ---
@@ -117,19 +122,39 @@ python examples/provider_custom.py
 
 Manifest now includes `price_per_call`, `price_token`, and `wallet`.
 
-### 4. User — auto-pay with private key
+### 4. User — auto-pay with the consumer's private key
+
+Payment is a **normal on-chain INFR transfer** signed by the consumer's own
+key. Provide it via `PAYER_PRIVATE_KEY` (keeps the key out of shell history):
 
 ```bash
-set PAYER_PRIVATE_KEY=0xYourUserPrivateKey
+set PAYER_PRIVATE_KEY=0xYourConsumerPrivateKey
 set INFR_CONTRACT=0xYourINFRContractAddress
-python examples/user_app.py --manifest manifests/echo-agent.json --task "hello"
+python examples/consumer.py --agent echo-agent --task "hello"
 ```
 
-The client sends INFR directly on Monad, then calls the agent with `payment_tx`.
+From Python you can also pass the key explicitly:
 
-Or pass an existing tx manually:
+```python
+import os
+from infernet import Client
+
+client = Client.from_agent(
+    "echo-agent",
+    private_key=os.environ["PAYER_PRIVATE_KEY"],
+)
+print(client.infer("hello").output)
+```
+
+The client signs and sends the INFR transfer on-chain, waits for the receipt,
+then calls the agent with the resulting `payment_tx`. The runner verifies that
+transaction before running inference.
+
+Or pass an existing tx manually (no key needed):
 
 ```bash
+python examples/consumer.py --agent echo-agent --task "hello" --no-auto-pay
+# then supply the tx via the user_app flow:
 python examples/user_app.py --manifest manifests/echo-agent.json --task "hello" --payment-tx 0xabc... --no-auto-pay
 ```
 
@@ -147,7 +172,128 @@ User                         Monad testnet              Runner
 
 ---
 
-## Architecture
+## ERC-8004 agent verification (Monad)
+
+InferNet integrates with the [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) Identity Registry on Monad testnet. Providers mint an on-chain agent NFT; users verify the manifest matches chain state before calling the agent.
+
+Pre-deployed registries on Monad testnet:
+
+| Registry | Address |
+|----------|---------|
+| Identity | `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` |
+| Reputation | `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63` |
+
+### 1. Provider — register on serve
+
+```bash
+set AGENT_OWNER_PRIVATE_KEY=0xYourProviderKey
+set RUNNER_WALLET=0xYourRunnerWallet
+infernet serve --backend ollama --name echo-agent --register-erc8004 --manifest manifests/echo-agent.json
+```
+
+Or auto-register via env:
+
+```bash
+set REGISTER_ERC8004=1
+python examples/provider_custom.py
+```
+
+The manifest gains `erc8004_agent_id`, `erc8004_registry`, and `erc8004_tx`.
+
+### 2. Provider — register an existing manifest
+
+```bash
+infernet register --manifest manifests/echo-agent.json --out manifests/echo-agent.json
+```
+
+Preview the agent card without sending a tx:
+
+```bash
+infernet register --manifest manifests/echo-agent.json --dry-run
+```
+
+### 3. User — verified inference
+
+When a manifest includes `erc8004_agent_id`, the client verifies on-chain identity automatically:
+
+```python
+from infernet import Client
+
+client = Client.from_manifest("manifests/echo-agent.json")
+result = client.infer("hello")  # verifies ERC-8004 before connecting
+```
+
+Manual verification:
+
+```bash
+infernet verify --manifest manifests/echo-agent.json
+```
+
+### Agent card format
+
+InferNet publishes an ERC-8004 registration-v1 JSON (stored on-chain as a base64 data URI) with:
+
+- `services.infernet` — libp2p multiaddr
+- `services.infernet-manifest` — protocol ID (`/infernet/agent/1.0.0`)
+- `services.wallet` — payment address (when paid)
+- `supportedTrust` — `reputation`, `crypto-economic`
+
+---
+
+## Platform sync (list → discover → use)
+
+Providers list agents on the platform; users browse, filter, and run them in the browser.
+
+### Provider flow
+
+```bash
+pip install -e .
+
+set INFERNET_PLATFORM_URL=http://localhost:3000
+set PLATFORM_PUBLISH_KEY=dev-publish-key-change-me
+set PUBLISH_TO_PLATFORM=1
+
+# wrap your agent and list on platform
+infernet serve --backend ollama --name my-agent --publish --manifest manifests/my-agent.json
+
+# or publish an existing manifest
+infernet publish --manifest manifests/my-agent.json
+```
+
+While serving, the SDK sends heartbeats every 60s (online status on the marketplace).
+
+### User flow
+
+1. Open `/agents` — filter by backend, free/paid, ERC-8004 verified, online
+2. Open an agent → **copy its id** (or the ready-made Python/CLI snippet)
+3. Drop it into your project: `Client.from_agent("<id>")`
+4. Or run it in the browser: paid agents pay INFR then call the libp2p runner;
+   free agents call the runner directly
+
+The id is the only parameter you need to copy — the SDK fetches the manifest
+from `GET /api/manifests/<id>` and connects.
+
+### Gateway (required for browser inference)
+
+```bash
+pip install -e ".[bridge]"
+infernet-gateway
+# listens on http://127.0.0.1:8787
+```
+
+Set `INFERNET_GATEWAY_URL` in frontend `.env.local`.
+
+### API
+
+| Endpoint | Role |
+|----------|------|
+| `POST /api/manifests` | Provider publishes manifest (Bearer `PLATFORM_PUBLISH_KEY`) |
+| `POST /api/manifests/heartbeat` | Provider heartbeat while serving |
+| `GET /api/manifests/<id>` | Resolve one manifest by id (used by `Client.from_agent`) |
+| `GET /api/agents?q=&backend=&paid=1&verified=1&online=1` | User discovery |
+| `POST /api/infer` | Verify payment → proxy to gateway |
+
+---
 
 ```
 Provider                         User
@@ -198,13 +344,15 @@ infernet/
 │   ├── runner.py       # libp2p provider
 │   ├── manifest.py     # Capability manifest
 │   ├── payment.py      # Monad INFR pay + verify
+│   ├── erc8004.py      # ERC-8004 identity register + verify
 │   └── p2p.py          # libp2p stream helpers
 ├── contracts/          # INFR ERC-20 (Foundry)
 ├── examples/
-│   ├── provider_openclaw.py
-│   ├── provider_ollama.py
-│   ├── provider_custom.py
-│   └── user_app.py
+│   ├── provider_openclaw.py   # host side
+│   ├── provider_ollama.py     # host side
+│   ├── provider_custom.py     # host side
+│   ├── consumer.py            # use side (copy the agent id)
+│   └── user_app.py            # use side (manifest / multiaddr)
 └── manifests/          # Exported agent manifests
 ```
 

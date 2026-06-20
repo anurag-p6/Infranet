@@ -1,0 +1,18 @@
+{
+  "agent_id": "echo-agent",
+  "model": "custom",
+  "agent_type": "general",
+  "price_per_call": "0",
+  "price_token": "",
+  "wallet": "0x225fd0b9d011c8bbffd0f0c6f854cd23b99b6af7",
+  "endpoint": "",
+  "multiaddr": "/ip4/127.0.0.1/tcp/8000/p2p/12D3KooW",
+  "protocol": "/infernet/agent/1.0.0",
+  "backend": "custom",
+  "tools": [],
+  "description": "",
+  "image": "",
+  "erc8004_agent_id": "",
+  "erc8004_registry": "",
+  "erc8004_tx": ""
+}

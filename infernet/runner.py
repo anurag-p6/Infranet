@@ -1,20 +1,33 @@
 from __future__ import annotations
 
-import secrets
+from decimal import Decimal
 from typing import Any
 
 import trio
-from libp2p.crypto.secp256k1 import create_new_key_pair
-from libp2p.peer.peerinfo import info_from_p2p_addr
-from libp2p import new_host
-import multiaddr
-
-from decimal import Decimal
 
 from infernet.adapters.base import AgentAdapter
+from infernet.config import MonadConfig
 from infernet.exceptions import PaymentVerificationError
 from infernet.manifest import Manifest
 from infernet.payment import payment_required, verify_infr_payment
+from infernet.erc8004 import (
+    attach_registration_to_manifest,
+    register_agent,
+    registration_required,
+    verify_agent_registration,
+)
+from infernet.platform import (
+    PlatformConfig,
+    heartbeat_manifest,
+    publish_manifest,
+    should_publish_to_platform,
+)
+from infernet.staking import (
+    attach_stake_info_to_manifest,
+    attach_stake_to_manifest,
+    get_stake,
+    stake_agent,
+)
 from infernet.p2p import (
     MANIFEST_PROTOCOL,
     create_host,
@@ -65,6 +78,9 @@ async def run_runner(
     wallet: str = "",
     agent_type: str = "general",
     manifest_path: str | None = None,
+    register_erc8004: bool = False,
+    require_erc8004: bool = False,
+    stake_amount: str = "",
 ) -> None:
     host, listen_addrs, port = create_host(port)
     peer_id = host.get_id().to_string()
@@ -84,6 +100,74 @@ async def run_runner(
 
     if manifest_path:
         manifest.save(manifest_path)
+
+    if stake_amount and Decimal(stake_amount) > 0:
+        existing = await trio.to_thread.run_sync(get_stake, agent_id)
+        if existing.active:
+            manifest = attach_stake_info_to_manifest(manifest, existing)
+            print(f"\nAgent already bonded: {existing.amount_mon} MON staked")
+        else:
+            result = await trio.to_thread.run_sync(
+                stake_agent, agent_id, stake_amount
+            )
+            manifest = attach_stake_to_manifest(manifest, result)
+            print(f"\nStaked {result.amount_mon} MON bond for '{agent_id}'")
+            print(f"Stake tx: {result.tx_hash}")
+        if manifest_path:
+            manifest.save(manifest_path)
+
+    if register_erc8004 and not manifest.erc8004_agent_id:
+        result = await trio.to_thread.run_sync(register_agent, manifest)
+        manifest = attach_registration_to_manifest(
+            manifest,
+            result,
+            chain_id=MonadConfig.from_env().chain_id,
+        )
+        if manifest_path:
+            manifest.save(manifest_path)
+        print(f"\nERC-8004 registered: agent #{result.agent_id}")
+        print(f"Registry tx: {result.tx_hash}")
+
+    if require_erc8004 or registration_required(manifest):
+        await trio.to_thread.run_sync(verify_agent_registration, manifest)
+        print("ERC-8004 identity verified on-chain")
+
+    platform_cfg = PlatformConfig.from_env()
+    listing_url = ""
+
+    if should_publish_to_platform():
+        try:
+            result = await trio.to_thread.run_sync(
+                publish_manifest, manifest, peer_id=peer_id
+            )
+            rel = result.get("url", f"/agents/{manifest.agent_id}")
+            if rel.startswith("http"):
+                listing_url = rel
+            elif platform_cfg:
+                listing_url = f"{platform_cfg.base_url}{rel}"
+            else:
+                listing_url = rel
+            print(f"Listed on platform: {listing_url}")
+        except Exception as exc:
+            print(f"Platform publish skipped: {exc}")
+    elif platform_cfg:
+        # Platform URL is known but auto-publish is off — show where it would list.
+        listing_url = f"{platform_cfg.base_url}/agents/{manifest.agent_id}"
+
+    async def heartbeat_loop() -> None:
+        if not should_publish_to_platform():
+            return
+        while True:
+            await trio.sleep(60)
+            try:
+                await trio.to_thread.run_sync(
+                    heartbeat_manifest,
+                    manifest.agent_id,
+                    multiaddr=manifest.multiaddr,
+                    peer_id=peer_id,
+                )
+            except Exception:
+                pass
 
     async def infer_handler(request: dict[str, Any], _stream) -> dict[str, Any]:
         task = request.get("task", "")
@@ -130,6 +214,7 @@ async def run_runner(
 
     async with host.run(listen_addrs=listen_addrs), trio.open_nursery() as nursery:
         nursery.start_soon(host.get_peerstore().start_cleanup_task, 60)
+        nursery.start_soon(heartbeat_loop)
 
         print(f"InferNet agent '{agent_id}' is live")
         print(f"Peer ID: {peer_id}")
@@ -137,6 +222,20 @@ async def run_runner(
         print("Connect with:")
         for addr in listen_addrs:
             print(f"  {addr}/p2p/{peer_id}")
+
+        print("\n" + "─" * 56)
+        if listing_url and should_publish_to_platform():
+            print("Your agent is published. View & share it here:")
+            print(f"  {listing_url}")
+        elif listing_url:
+            print("Publish this agent to the platform:")
+            print("  re-run with --publish (or set PUBLISH_TO_PLATFORM=1)")
+            print(f"  it will be listed at: {listing_url}")
+        else:
+            print("Publish this agent to the platform:")
+            print("  set INFERNET_PLATFORM_URL and re-run with --publish")
+        print("─" * 56)
+
         print("\nManifest:")
         print(manifest.to_json())
         if manifest_path:

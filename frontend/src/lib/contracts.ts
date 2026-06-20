@@ -79,9 +79,48 @@ export const erc8004IdentityAbi = [
   },
 ] as const;
 
+export const agentStakingAbi = [
+  {
+    type: "function",
+    name: "stakeOf",
+    stateMutability: "view",
+    inputs: [{ name: "agentId", type: "string" }],
+    outputs: [
+      { name: "staker", type: "address" },
+      { name: "amount", type: "uint256" },
+      { name: "stakedAt", type: "uint256" },
+      { name: "active", type: "bool" },
+    ],
+  },
+  {
+    type: "function",
+    name: "isStaked",
+    stateMutability: "view",
+    inputs: [{ name: "agentId", type: "string" }],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    type: "function",
+    name: "minStake",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "totalStaked",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
+
 export const infrAddress =
   (process.env.NEXT_PUBLIC_INFR_CONTRACT as `0x${string}`) ??
   "0xD1758e1205f79C4F2dAc8f6b7D32A2E517835851";
+
+export const agentStakingAddress = (process.env.NEXT_PUBLIC_AGENT_STAKING_CONTRACT ??
+  "") as `0x${string}` | "";
 
 export const erc8004IdentityAddress =
   (process.env.NEXT_PUBLIC_ERC8004_IDENTITY_REGISTRY as `0x${string}`) ??

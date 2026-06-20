@@ -15,3 +15,15 @@ class PaymentRequiredError(PaymentError):
 
 class PaymentVerificationError(PaymentError):
     """Raised when on-chain payment verification fails."""
+
+
+class AgentVerificationError(InferNetError):
+    """Raised when ERC-8004 agent identity verification fails."""
+
+
+class PlatformError(InferNetError):
+    """Raised when platform publish or sync fails."""
+
+
+class StakeError(InferNetError):
+    """Raised when an agent stake (bond) operation or verification fails."""
