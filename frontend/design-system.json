@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "mood": "bold editorial minimal",
+    "visualStyle": "Bold Typography Minimalism",
+    "defaultMode": "light",
+    "colorRatio": "60% white · 30% purple · 10% contrast"
+  },
+  "colorSystem": {
+    "light": {
+      "--color-bg": "#FAFAFA",
+      "--color-surface": "#FFFFFF",
+      "--color-primary": "#6E54FF",
+      "--color-primary-soft": "#DDD7FE",
+      "--color-primary-muted": "#836EF9",
+      "--color-text": "#0E091C",
+      "--color-text-secondary": "#3D3555",
+      "--color-text-muted": "#6B6280",
+      "--color-border": "#E8E4F8",
+      "--color-accent": "#0E091C"
+    }
+  },
+  "typography": {
+    "display": "Bricolage Grotesque",
+    "body": "Manrope",
+    "accent": "JetBrains Mono"
+  },
+  "surface": {
+    "treatment": "grain",
+    "grainOpacity": 0.035
+  }
+}
